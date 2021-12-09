@@ -1,59 +1,66 @@
-﻿using System;
-using System.Reflection;
+﻿using System.Threading;
 using UnityEngine;
 
 namespace ET
 {
-	public interface IEntry
+	// 1 mono模式 2 ILRuntime模式 3 mono热重载模式
+	public enum CodeMode
 	{
-		void Start();
-		void Update();
-		void LateUpdate();
-		void OnApplicationQuit();
+		Mono = 1,
+		ILRuntime = 2,
+		Reload = 3,
 	}
 	
 	public class Init: MonoBehaviour
 	{
-		private IEntry entry;
+		public static Init Instance;
+		
+		private CodeLoader codeLoader;
+
+		public CodeMode CodeMode = CodeMode.Mono;
 		
 		private void Awake()
 		{
-			DontDestroyOnLoad(gameObject);
+			Instance = this;
 			
-			Assembly modelAssembly = null;
-			foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+#if ENABLE_IL2CPP
+			this.CodeMode = CodeMode.ILRuntime;
+#endif
+			
+			System.AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
 			{
-				string assemblyName = assembly.ManifestModule.Name;
-				if (assemblyName != "Unity.ModelView.dll")
-				{
-					continue;
-				}
-				modelAssembly = assembly;
-				break;
-			}
+				Log.Error(e.ExceptionObject.ToString());
+			};
+			
+			SynchronizationContext.SetSynchronizationContext(ThreadSynchronizationContext.Instance);
+			
+			DontDestroyOnLoad(gameObject);
 
-			Type initType = modelAssembly.GetType("ET.Entry");
-			this.entry = Activator.CreateInstance(initType) as IEntry;
+			Log.ILog = new UnityLogger();
+
+			Options.Instance = new Options();
+
+			this.codeLoader = CodeLoader.Instance;
 		}
 
 		private void Start()
 		{
-			this.entry.Start();
+			this.codeLoader.Start();
 		}
 
 		private void Update()
 		{
-			this.entry.Update();
+			this.codeLoader.Update();
 		}
 
 		private void LateUpdate()
 		{
-			this.entry.LateUpdate();
+			this.codeLoader.LateUpdate();
 		}
 
 		private void OnApplicationQuit()
 		{
-			this.entry.OnApplicationQuit();
+			this.codeLoader.OnApplicationQuit();
 		}
 	}
 }
